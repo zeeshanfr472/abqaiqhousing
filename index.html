@@ -27,8 +27,24 @@
 
     <!-- QR Scanner View -->
     <div id="scanner-view" class="container mx-auto p-4">
-        <div id="reader" class="w-full max-w-md mx-auto"></div>
-        <div id="scan-result" class="mt-4 text-center font-semibold text-gray-700"></div>
+        <div class="max-w-md mx-auto bg-white p-4 rounded shadow">
+            <!-- File Upload Button -->
+            <div class="mb-4 text-center">
+                <input type="file" 
+                       id="qr-input-file" 
+                       accept="image/*" 
+                       capture="environment"
+                       class="hidden" 
+                       onChange="handleFileSelect(event)">
+                <label for="qr-input-file" 
+                       class="bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 inline-block">
+                    Upload QR Code Image
+                </label>
+            </div>
+            <!-- QR Scanner -->
+            <div id="reader" class="w-full"></div>
+            <div id="scan-result" class="mt-4 text-center font-semibold text-gray-700"></div>
+        </div>
         
         <!-- Inspector Details Form -->
         <form id="inspector-form" class="hidden mt-4 bg-white p-4 rounded shadow max-w-md mx-auto">
@@ -103,29 +119,57 @@
 
         // Start the scanner with camera
         function startScanner() {
-            Html5Qrcode.getCameras().then(devices => {
-                if (devices && devices.length) {
-                    const cameraId = devices[0].id;
-                    html5QrCode.start(
-                        cameraId, 
-                        {
-                            fps: 10,
-                            qrbox: { width: 250, height: 250 }
-                        },
-                        onScanSuccess,
-                        onScanError
-                    ).catch(err => {
-                        console.error('Error starting camera:', err);
-                        document.getElementById('scan-result').innerHTML = 
-                            'Error accessing camera. Please make sure you have granted camera permissions.';
-                    });
-                } else {
-                    document.getElementById('scan-result').innerHTML = 
-                        'No camera devices found. Please make sure your device has a camera.';
-                }
-            }).catch(err => {
-                console.error('Error getting cameras:', err);
+            const config = {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1,
+                facingMode: "environment" // Use back camera only
+            };
+            
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                onScanSuccess,
+                onScanError
+            ).catch(err => {
+                console.error('Error starting camera:', err);
+                document.getElementById('scan-result').innerHTML = 
+                    'Error accessing camera. Please make sure you have granted camera permissions.';
             });
+        }
+
+        // Handle file selection for QR code scanning
+        function handleFileSelect(event) {
+            if (event.target.files.length === 0) {
+                return;
+            }
+            
+            const imageFile = event.target.files[0];
+            
+            // Stop any ongoing scanning
+            if (html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => {
+                    scanFile(imageFile);
+                });
+            } else {
+                scanFile(imageFile);
+            }
+        }
+
+        function scanFile(imageFile) {
+            document.getElementById('scan-result').innerHTML = 'Scanning...';
+            
+            html5QrCode.scanFile(imageFile, true)
+                .then(decodedText => {
+                    onScanSuccess(decodedText, null);
+                })
+                .catch(err => {
+                    console.error('Error scanning file:', err);
+                    document.getElementById('scan-result').innerHTML = 
+                        'Error scanning QR code. Please try again with a clearer image.';
+                    // Restart the camera scanner
+                    startScanner();
+                });
         }
 
         // Handle successful QR scan
@@ -142,7 +186,7 @@
                     startTime: new Date()
                 };
                 // Stop scanning after successful scan
-                if (html5QrCode) {
+                if (html5QrCode && html5QrCode.isScanning) {
                     html5QrCode.pause();
                 }
             } catch (error) {
