@@ -1,4 +1,3 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15,7 +14,10 @@
     <nav class="bg-blue-600 text-white p-4">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-xl font-bold">Building Inspector Tracker</h1>
-            <button onclick="toggleView('dashboard')" class="bg-blue-500 px-4 py-2 rounded">Dashboard</button>
+            <div class="space-x-2">
+                <button onclick="toggleView('scanner')" class="bg-blue-500 px-4 py-2 rounded">Scanner</button>
+                <button onclick="toggleView('dashboard')" class="bg-blue-500 px-4 py-2 rounded">Dashboard</button>
+            </div>
         </div>
     </nav>
 
@@ -30,11 +32,11 @@
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Name</label>
-                    <input type="text" id="inspector-name" required class="mt-1 block w-full rounded border-gray-300 shadow-sm">
+                    <input type="text" id="inspector-name" required class="mt-1 block w-full rounded border border-gray-300 shadow-sm p-2">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Badge Number</label>
-                    <input type="text" id="badge-number" required class="mt-1 block w-full rounded border-gray-300 shadow-sm">
+                    <input type="text" id="badge-number" required class="mt-1 block w-full rounded border border-gray-300 shadow-sm p-2">
                 </div>
                 <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
                     Start Inspection
@@ -81,38 +83,52 @@
 
     <script>
         // Configuration
-        const SPREADSHEET_ID = '1mxtkEceKTtzNErfNTGGDzDgKsZzV9HnBSOcatHO8tQk';
-        const API_KEY = 'AIzaSyA6wO5cDUhydhnq6fTm505W7Z0HletU6KA';
+        const SPREADSHEET_ID = '1mxtkEceKTtzNErfNTGGDzDgKsZzV9HnBSOcatHO8tQk'; // Replace with your spreadsheet ID
+        const API_KEY = 'YOUR_API_KEY'; // Replace with your API key
         let currentInspection = null;
+        let html5QrcodeScanner = null;
 
         // Initialize QR Scanner
         function initializeScanner() {
-            const html5QrcodeScanner = new Html5QrcodeScanner(
-                "reader", { fps: 10, qrbox: 250 });
-            
-            html5QrcodeScanner.render(onScanSuccess, onScanError);
+            console.log('Initializing scanner...');
+            if (html5QrcodeScanner === null) {
+                html5QrcodeScanner = new Html5QrcodeScanner(
+                    "reader", { fps: 10, qrbox: 250 });
+                
+                html5QrcodeScanner.render(onScanSuccess, onScanError);
+            }
         }
 
         // Handle successful QR scan
         function onScanSuccess(decodedText, decodedResult) {
-            const buildingData = JSON.parse(decodedText);
-            document.getElementById('scan-result').innerHTML = 
-                `Building: ${buildingData.name} (ID: ${buildingData.id})`;
-            document.getElementById('inspector-form').classList.remove('hidden');
-            currentInspection = {
-                buildingId: buildingData.id,
-                buildingName: buildingData.name,
-                startTime: new Date()
-            };
+            console.log('QR Code scanned:', decodedText);
+            try {
+                const buildingData = JSON.parse(decodedText);
+                document.getElementById('scan-result').innerHTML = 
+                    `Building: ${buildingData.name} (ID: ${buildingData.id})`;
+                document.getElementById('inspector-form').classList.remove('hidden');
+                currentInspection = {
+                    buildingId: buildingData.id,
+                    buildingName: buildingData.name,
+                    startTime: new Date()
+                };
+                // Optional: Stop scanning after successful scan
+                html5QrcodeScanner.pause();
+            } catch (error) {
+                console.error('Error parsing QR code data:', error);
+                document.getElementById('scan-result').innerHTML = 
+                    'Invalid QR code format. Please try again.';
+            }
         }
 
         function onScanError(errorMessage) {
-            console.error(errorMessage);
+            console.error('QR Scan error:', errorMessage);
         }
 
         // Handle form submission
         document.getElementById('inspector-form').addEventListener('submit', function(e) {
             e.preventDefault();
+            console.log('Form submitted');
             const inspectorName = document.getElementById('inspector-name').value;
             const badgeNumber = document.getElementById('badge-number').value;
 
@@ -120,6 +136,7 @@
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     position => {
+                        console.log('Got location:', position);
                         const inspection = {
                             ...currentInspection,
                             inspectorName,
@@ -131,23 +148,37 @@
                     },
                     error => {
                         console.error('Error getting location:', error);
-                        recordInspection({
+                        const inspection = {
                             ...currentInspection,
                             inspectorName,
-                            badgeNumber
-                        });
+                            badgeNumber,
+                            latitude: 'N/A',
+                            longitude: 'N/A'
+                        };
+                        recordInspection(inspection);
                     }
                 );
+            } else {
+                const inspection = {
+                    ...currentInspection,
+                    inspectorName,
+                    badgeNumber,
+                    latitude: 'N/A',
+                    longitude: 'N/A'
+                };
+                recordInspection(inspection);
             }
         });
 
         // Record inspection to Google Sheets
         function recordInspection(inspection) {
+            console.log('Recording inspection:', inspection);
             // Initialize Google Sheets API
             gapi.client.init({
                 apiKey: API_KEY,
                 discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"],
             }).then(() => {
+                console.log('Google Sheets API initialized');
                 const range = 'Sheet1!A:H';
                 const values = [
                     [
@@ -156,8 +187,8 @@
                         inspection.buildingId,
                         inspection.buildingName,
                         inspection.startTime.toISOString(),
-                        inspection.latitude || 'N/A',
-                        inspection.longitude || 'N/A'
+                        inspection.latitude,
+                        inspection.longitude
                     ]
                 ];
 
@@ -168,23 +199,36 @@
                     insertDataOption: 'INSERT_ROWS',
                     resource: { values }
                 }).then(response => {
+                    console.log('Inspection recorded:', response);
                     alert('Inspection recorded successfully!');
+                    // Reset form and scanner
+                    document.getElementById('inspector-form').reset();
+                    document.getElementById('inspector-form').classList.add('hidden');
+                    document.getElementById('scan-result').innerHTML = '';
+                    html5QrcodeScanner.resume();
                     updateDashboard();
+                }).catch(error => {
+                    console.error('Error recording inspection:', error);
+                    alert('Error recording inspection. Please try again.');
                 });
+            }).catch(error => {
+                console.error('Error initializing Google Sheets API:', error);
+                alert('Error connecting to Google Sheets. Please check your API key.');
             });
         }
 
         // Update dashboard data
         function updateDashboard() {
+            console.log('Updating dashboard...');
             gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: SPREADSHEET_ID,
                 range: 'Sheet1!A:H'
             }).then(response => {
                 const values = response.result.values;
-                if (values) {
+                if (values && values.length > 1) { // Check if there's data besides headers
                     // Update summary cards
                     const today = new Date().toDateString();
-                    const todayInspections = values.filter(row => 
+                    const todayInspections = values.slice(1).filter(row => 
                         new Date(row[4]).toDateString() === today
                     );
                     
@@ -197,6 +241,17 @@
                     document.getElementById('active-inspectors').textContent = 
                         activeInspectors;
 
+                    // Calculate average inspection time
+                    if (todayInspections.length > 0) {
+                        const totalDuration = todayInspections.reduce((sum, row) => {
+                            const duration = calculateDuration(new Date(row[4]));
+                            return sum + parseInt(duration);
+                        }, 0);
+                        const avgDuration = Math.round(totalDuration / todayInspections.length);
+                        document.getElementById('avg-inspection-time').textContent = 
+                            `${avgDuration} min`;
+                    }
+
                     // Update inspection history table
                     const historyHTML = todayInspections.map(row => `
                         <tr>
@@ -206,13 +261,15 @@
                                 ${new Date(row[4]).toLocaleTimeString()}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                ${calculateDuration(new Date(row[4]))}
+                                ${calculateDuration(new Date(row[4]))} min
                             </td>
                         </tr>
                     `).join('');
                     
                     document.getElementById('inspection-history').innerHTML = historyHTML;
                 }
+            }).catch(error => {
+                console.error('Error updating dashboard:', error);
             });
         }
 
@@ -220,23 +277,35 @@
             const duration = Math.floor(
                 (new Date() - startTime) / (1000 * 60)
             );
-            return `${duration} min`;
+            return duration;
         }
 
         function toggleView(view) {
             if (view === 'dashboard') {
                 document.getElementById('scanner-view').classList.add('hidden');
                 document.getElementById('dashboard-view').classList.remove('hidden');
+                if (html5QrcodeScanner) {
+                    html5QrcodeScanner.pause();
+                }
                 updateDashboard();
             } else {
                 document.getElementById('scanner-view').classList.remove('hidden');
                 document.getElementById('dashboard-view').classList.add('hidden');
+                if (html5QrcodeScanner) {
+                    html5QrcodeScanner.resume();
+                }
             }
         }
 
         // Initialize the application
-        initializeScanner();
-        gapi.load('client', initializeScanner);
+        window.onload = function() {
+            console.log('Application starting...');
+            // Load and initialize both Google API client and scanner
+            gapi.load('client', () => {
+                console.log('Google API client loaded');
+                initializeScanner();
+            });
+        };
     </script>
 </body>
 </html>
