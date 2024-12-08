@@ -1,0 +1,242 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Building Inspector Attendance System</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <!-- QR Code Scanner Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
+    <!-- Google Sheets API -->
+    <script src="https://apis.google.com/js/api.js"></script>
+</head>
+<body class="bg-gray-100">
+    <nav class="bg-blue-600 text-white p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold">Building Inspector Tracker</h1>
+            <button onclick="toggleView('dashboard')" class="bg-blue-500 px-4 py-2 rounded">Dashboard</button>
+        </div>
+    </nav>
+
+    <!-- QR Scanner View -->
+    <div id="scanner-view" class="container mx-auto p-4">
+        <div id="reader" class="w-full max-w-md mx-auto"></div>
+        <div id="scan-result" class="mt-4"></div>
+        
+        <!-- Inspector Details Form -->
+        <form id="inspector-form" class="hidden mt-4 bg-white p-4 rounded shadow">
+            <h2 class="text-xl font-bold mb-4">Inspector Details</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" id="inspector-name" required class="mt-1 block w-full rounded border-gray-300 shadow-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Badge Number</label>
+                    <input type="text" id="badge-number" required class="mt-1 block w-full rounded border-gray-300 shadow-sm">
+                </div>
+                <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                    Start Inspection
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Dashboard View -->
+    <div id="dashboard-view" class="hidden container mx-auto p-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Summary Cards -->
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-semibold mb-2">Total Inspections Today</h3>
+                <p id="total-inspections" class="text-3xl font-bold text-blue-600">0</p>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-semibold mb-2">Active Inspectors</h3>
+                <p id="active-inspectors" class="text-3xl font-bold text-green-600">0</p>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-semibold mb-2">Average Inspection Time</h3>
+                <p id="avg-inspection-time" class="text-3xl font-bold text-purple-600">0 min</p>
+            </div>
+        </div>
+
+        <!-- Inspection History Table -->
+        <div class="mt-8 bg-white rounded shadow overflow-x-auto">
+            <table class="min-w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Inspector</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Building</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check-in Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
+                    </tr>
+                </thead>
+                <tbody id="inspection-history" class="divide-y divide-gray-200">
+                    <!-- Inspection history will be populated here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const SPREADSHEET_ID = '1mxtkEceKTtzNErfNTGGDzDgKsZzV9HnBSOcatHO8tQk';
+        const API_KEY = 'AIzaSyA6wO5cDUhydhnq6fTm505W7Z0HletU6KA';
+        let currentInspection = null;
+
+        // Initialize QR Scanner
+        function initializeScanner() {
+            const html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader", { fps: 10, qrbox: 250 });
+            
+            html5QrcodeScanner.render(onScanSuccess, onScanError);
+        }
+
+        // Handle successful QR scan
+        function onScanSuccess(decodedText, decodedResult) {
+            const buildingData = JSON.parse(decodedText);
+            document.getElementById('scan-result').innerHTML = 
+                `Building: ${buildingData.name} (ID: ${buildingData.id})`;
+            document.getElementById('inspector-form').classList.remove('hidden');
+            currentInspection = {
+                buildingId: buildingData.id,
+                buildingName: buildingData.name,
+                startTime: new Date()
+            };
+        }
+
+        function onScanError(errorMessage) {
+            console.error(errorMessage);
+        }
+
+        // Handle form submission
+        document.getElementById('inspector-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const inspectorName = document.getElementById('inspector-name').value;
+            const badgeNumber = document.getElementById('badge-number').value;
+
+            // Get current location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        const inspection = {
+                            ...currentInspection,
+                            inspectorName,
+                            badgeNumber,
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        };
+                        recordInspection(inspection);
+                    },
+                    error => {
+                        console.error('Error getting location:', error);
+                        recordInspection({
+                            ...currentInspection,
+                            inspectorName,
+                            badgeNumber
+                        });
+                    }
+                );
+            }
+        });
+
+        // Record inspection to Google Sheets
+        function recordInspection(inspection) {
+            // Initialize Google Sheets API
+            gapi.client.init({
+                apiKey: API_KEY,
+                discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"],
+            }).then(() => {
+                const range = 'Sheet1!A:H';
+                const values = [
+                    [
+                        inspection.inspectorName,
+                        inspection.badgeNumber,
+                        inspection.buildingId,
+                        inspection.buildingName,
+                        inspection.startTime.toISOString(),
+                        inspection.latitude || 'N/A',
+                        inspection.longitude || 'N/A'
+                    ]
+                ];
+
+                gapi.client.sheets.spreadsheets.values.append({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: range,
+                    valueInputOption: 'RAW',
+                    insertDataOption: 'INSERT_ROWS',
+                    resource: { values }
+                }).then(response => {
+                    alert('Inspection recorded successfully!');
+                    updateDashboard();
+                });
+            });
+        }
+
+        // Update dashboard data
+        function updateDashboard() {
+            gapi.client.sheets.spreadsheets.values.get({
+                spreadsheetId: SPREADSHEET_ID,
+                range: 'Sheet1!A:H'
+            }).then(response => {
+                const values = response.result.values;
+                if (values) {
+                    // Update summary cards
+                    const today = new Date().toDateString();
+                    const todayInspections = values.filter(row => 
+                        new Date(row[4]).toDateString() === today
+                    );
+                    
+                    document.getElementById('total-inspections').textContent = 
+                        todayInspections.length;
+                    
+                    const activeInspectors = new Set(
+                        todayInspections.map(row => row[0])
+                    ).size;
+                    document.getElementById('active-inspectors').textContent = 
+                        activeInspectors;
+
+                    // Update inspection history table
+                    const historyHTML = todayInspections.map(row => `
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">${row[0]}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${row[3]}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                ${new Date(row[4]).toLocaleTimeString()}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                ${calculateDuration(new Date(row[4]))}
+                            </td>
+                        </tr>
+                    `).join('');
+                    
+                    document.getElementById('inspection-history').innerHTML = historyHTML;
+                }
+            });
+        }
+
+        function calculateDuration(startTime) {
+            const duration = Math.floor(
+                (new Date() - startTime) / (1000 * 60)
+            );
+            return `${duration} min`;
+        }
+
+        function toggleView(view) {
+            if (view === 'dashboard') {
+                document.getElementById('scanner-view').classList.add('hidden');
+                document.getElementById('dashboard-view').classList.remove('hidden');
+                updateDashboard();
+            } else {
+                document.getElementById('scanner-view').classList.remove('hidden');
+                document.getElementById('dashboard-view').classList.add('hidden');
+            }
+        }
+
+        // Initialize the application
+        initializeScanner();
+        gapi.load('client', initializeScanner);
+    </script>
+</body>
+</html>
