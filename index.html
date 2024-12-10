@@ -147,7 +147,9 @@
         }
 
         console.log('Attempting to record inspection:', inspection);
-        const range = 'Sheet1!A:H';
+        // Update this line to match your sheet name
+        const range = 'AbqaiqHousing!A:H';  // Changed from Sheet1 to AbqaiqHousing
+        
         const values = [[
             inspection.inspectorName,
             inspection.badgeNumber,
@@ -174,6 +176,7 @@
         document.getElementById('inspector-form').classList.add('hidden');
         document.getElementById('scan-result').innerHTML = '';
         if (html5QrCode) html5QrCode.resume();
+        updateDashboard();
         
     } catch (error) {
         console.error('Full error object:', error);
@@ -181,7 +184,6 @@
         console.error('Error message:', error.message);
         console.error('Error details:', error.result ? error.result.error : 'No additional details');
         alert(`Error recording inspection: ${error.message}`);
-        throw error;
     }
 }
 
@@ -428,7 +430,7 @@
             console.log('Updating dashboard...');
             gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: SPREADSHEET_ID,
-                range: 'Sheet1!A:H'
+                range: 'AbqaiqHousing!A:H'
             }).then(response => {
                 const values = response.result.values;
                 if (values && values.length > 1) {
