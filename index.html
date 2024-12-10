@@ -10,6 +10,7 @@
     <!-- Google Sheets API -->
     <script src="https://apis.google.com/js/api.js"></script>
 </head>
+
 <body class="bg-gray-100">
     <nav class="bg-blue-600 text-white p-4">
         <div class="container mx-auto flex justify-between items-center">
@@ -103,10 +104,131 @@
 
     <script>
         // Configuration
-        const SPREADSHEET_ID = '1mxtkEceKTtzNErfNTGGDzDgKsZzV9HnBSOcatHO8tQk';
-        const API_KEY = 'AIzaSyA6wO5cDUhydhnq6fTm505W7Z0HletU6KA';
-        let currentInspection = null;
-        let html5QrCode = null;
+        const SPREADSHEET_ID = 'AIzaSyA6wO5cDUhydhnq6fTm505W7Z0HletU6KA'; // Replace with your spreadsheet ID
+    const API_KEY = '1mxtkEceKTtzNErfNTGGDzDgKsZzV9HnBSOcatHO8tQk'; // Replace with your API key
+    let currentInspection = null;
+    let html5QrCode = null;
+    let isApiInitialized = false;
+
+    // Initialize Google Sheets API
+    async function initializeGoogleSheetsAPI() {
+        try {
+            await new Promise((resolve, reject) => {
+                gapi.load('client', resolve);
+            });
+            
+            await gapi.client.init({
+                apiKey: API_KEY,
+                discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"],
+            });
+            
+            isApiInitialized = true;
+            console.log('Google Sheets API initialized successfully');
+        } catch (error) {
+            console.error('Error initializing Google Sheets API:', error);
+            alert('Error connecting to Google Sheets. Please check your API key.');
+        }
+    }
+
+    // Record inspection to Google Sheets
+    async function recordInspection(inspection) {
+        if (!isApiInitialized) {
+            await initializeGoogleSheetsAPI();
+        }
+
+        try {
+            console.log('Recording inspection:', inspection);
+            const range = 'Sheet1!A:H';
+            const values = [
+                [
+                    inspection.inspectorName,
+                    inspection.badgeNumber,
+                    inspection.buildingId,
+                    inspection.buildingName,
+                    inspection.startTime.toISOString(),
+                    inspection.latitude,
+                    inspection.longitude,
+                    new Date().toISOString() // Add end time
+                ]
+            ];
+
+            const response = await gapi.client.sheets.spreadsheets.values.append({
+                spreadsheetId: SPREADSHEET_ID,
+                range: range,
+                valueInputOption: 'RAW',
+                insertDataOption: 'INSERT_ROWS',
+                resource: { values }
+            });
+
+            console.log('Inspection recorded successfully:', response);
+            alert('Inspection recorded successfully!');
+            
+            // Reset form and scanner
+            document.getElementById('inspector-form').reset();
+            document.getElementById('inspector-form').classList.add('hidden');
+            document.getElementById('scan-result').innerHTML = '';
+            if (html5QrCode) {
+                html5QrCode.resume();
+            }
+            updateDashboard();
+            
+        } catch (error) {
+            console.error('Error recording inspection:', error);
+            alert('Error recording inspection. Please try again.');
+        }
+    }
+
+    // Handle form submission with async/await
+    document.getElementById('inspector-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        console.log('Form submitted');
+        
+        const inspectorName = document.getElementById('inspector-name').value;
+        const badgeNumber = document.getElementById('badge-number').value;
+
+        try {
+            const position = await new Promise((resolve, reject) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(resolve, reject);
+                } else {
+                    reject(new Error('Geolocation not supported'));
+                }
+            });
+
+            const inspection = {
+                ...currentInspection,
+                inspectorName,
+                badgeNumber,
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+            };
+
+            await recordInspection(inspection);
+
+        } catch (error) {
+            console.error('Error getting location:', error);
+            const inspection = {
+                ...currentInspection,
+                inspectorName,
+                badgeNumber,
+                latitude: 'N/A',
+                longitude: 'N/A'
+            };
+            await recordInspection(inspection);
+        }
+    });
+
+    // Initialize the application
+    window.onload = async function() {
+        console.log('Application starting...');
+        try {
+            await initializeGoogleSheetsAPI();
+            initializeScanner();
+        } catch (error) {
+            console.error('Error during initialization:', error);
+            alert('Error initializing the application. Please refresh the page.');
+        }
+    };
 
         // Initialize QR Scanner
         function initializeScanner() {
