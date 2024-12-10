@@ -3,529 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Building Inspector Attendance System</title>
+    <title>Google Sheets API Test</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
-    <!-- QR Code Scanner Library -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
     <!-- Google Sheets API -->
     <script src="https://apis.google.com/js/api.js"></script>
 </head>
-
-<body class="bg-gray-100">
-    <nav class="bg-blue-600 text-white p-4">
-        <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-xl font-bold">Building Inspector Tracker</h1>
-            <!-- Scanner button - visible only in dashboard view -->
-            <button id="scanner-btn" onclick="toggleView('scanner')" class="hidden bg-blue-500 px-4 py-2 rounded hover:bg-blue-600">
-                Open Scanner
-            </button>
-            <!-- Dashboard button - visible only in scanner view -->
-            <button id="dashboard-btn" onclick="toggleView('dashboard')" class="bg-blue-500 px-4 py-2 rounded hover:bg-blue-600">
-                View Dashboard
-            </button>
-        </div>
-    </nav>
-
-    <!-- QR Scanner View -->
-    <div id="scanner-view" class="container mx-auto p-4">
-        <div class="max-w-md mx-auto bg-white p-4 rounded shadow">
-            <!-- File Upload Button -->
-            <div class="mb-4 text-center">
-                <input type="file" 
-                       id="qr-input-file" 
-                       accept="image/*" 
-                       capture="environment"
-                       class="hidden" 
-                       onChange="handleFileSelect(event)">
-                <label for="qr-input-file" 
-                       class="bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 inline-block">
-                    Upload QR Code Image
-                </label>
-            </div>
-            <!-- QR Scanner -->
-            <div id="reader" class="w-full"></div>
-            <div id="scan-result" class="mt-4 text-center font-semibold text-gray-700"></div>
-        </div>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-md mx-auto bg-white p-6 rounded shadow">
+        <h1 class="text-2xl font-bold mb-4">Google Sheets API Test</h1>
         
-        <!-- Inspector Details Form -->
-        <form id="inspector-form" class="hidden mt-4 bg-white p-4 rounded shadow max-w-md mx-auto">
-            <h2 class="text-xl font-bold mb-4">Inspector Details</h2>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Name</label>
-                    <input type="text" id="inspector-name" required class="mt-1 block w-full rounded border border-gray-300 shadow-sm p-2">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Badge Number</label>
-                    <input type="text" id="badge-number" required class="mt-1 block w-full rounded border border-gray-300 shadow-sm p-2">
-                </div>
-                <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
-                    Start Inspection
-                </button>
+        <form id="test-form" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Name</label>
+                <input type="text" id="name" required class="mt-1 block w-full rounded border border-gray-300 shadow-sm p-2">
             </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Badge Number</label>
+                <input type="text" id="badge" required class="mt-1 block w-full rounded border border-gray-300 shadow-sm p-2">
+            </div>
+            <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                Submit Test Data
+            </button>
         </form>
-    </div>
 
-    <!-- Dashboard View -->
-    <div id="dashboard-view" class="hidden container mx-auto p-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <!-- Summary Cards -->
-            <div class="bg-white p-4 rounded shadow">
-                <h3 class="text-lg font-semibold mb-2">Total Inspections Today</h3>
-                <p id="total-inspections" class="text-3xl font-bold text-blue-600">0</p>
-            </div>
-            <div class="bg-white p-4 rounded shadow">
-                <h3 class="text-lg font-semibold mb-2">Active Inspectors</h3>
-                <p id="active-inspectors" class="text-3xl font-bold text-green-600">0</p>
-            </div>
-            <div class="bg-white p-4 rounded shadow">
-                <h3 class="text-lg font-semibold mb-2">Average Inspection Time</h3>
-                <p id="avg-inspection-time" class="text-3xl font-bold text-purple-600">0 min</p>
-            </div>
-        </div>
-
-        <!-- Inspection History Table -->
-        <div class="mt-8 bg-white rounded shadow overflow-x-auto">
-            <table class="min-w-full">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Inspector</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Building</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check-in Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
-                    </tr>
-                </thead>
-                <tbody id="inspection-history" class="divide-y divide-gray-200">
-                    <!-- Inspection history will be populated here -->
-                </tbody>
-            </table>
-        </div>
+        <div id="status" class="mt-4 text-sm"></div>
     </div>
 
     <script>
         // Configuration
-    const SPREADSHEET_ID = '1mxtkEceKTtzNErfNTGGDzDgKsZzV9HnBSOcatHO8tQk';
-    const API_KEY = 'AIzaSyA6wO5cDUhydhnq6fTm505W7Z0HletU6KA';
-    let currentInspection = null;
-    let html5QrCode = null;
-    let isApiInitialized = false;
+        const SPREADSHEET_ID = '1mxtkEceKTtzNErfNTGGDzDgKsZzV9HnBSOcatHO8tQk';
+        const API_KEY = 'YOUR-API-KEY'; // Replace with your API key
+        let isApiInitialized = false;
 
-    // Initialize Google Sheets API
-    async function initializeGoogleSheetsAPI() {
-    try {
-        await new Promise((resolve, reject) => {
-            gapi.load('client', {
-                callback: resolve,
-                onerror: reject
-            });
-        });
-        
-        await gapi.client.init({
-            apiKey: API_KEY,
-            discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"]
-        });
-        
-        // Test the connection
-        const test = await gapi.client.sheets.spreadsheets.get({
-            spreadsheetId: SPREADSHEET_ID
-        });
-        
-        console.log('Google Sheets API connection test successful:', test);
-        isApiInitialized = true;
-    } catch (error) {
-        console.error('Error details:', error);
-        throw new Error(`Failed to initialize API: ${error.message}`);
-    }
-}
-
-    // Record inspection to Google Sheets
-    async function recordInspection(inspection) {
-    try {
-        if (!isApiInitialized) {
-            console.log('Initializing API...');
-            await initializeGoogleSheetsAPI();
-        }
-
-        console.log('Attempting to record inspection:', inspection);
-        // Update this line to match your sheet name
-        const range = 'AbqaiqHousing!A:H';  // Changed from Sheet1 to AbqaiqHousing
-        
-        const values = [[
-            inspection.inspectorName,
-            inspection.badgeNumber,
-            inspection.buildingId,
-            inspection.buildingName,
-            inspection.startTime.toISOString(),
-            inspection.latitude,
-            inspection.longitude,
-            new Date().toISOString()
-        ]];
-
-        const response = await gapi.client.sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID,
-            range: range,
-            valueInputOption: 'RAW',
-            insertDataOption: 'INSERT_ROWS',
-            resource: { values }
-        });
-
-        console.log('Success:', response);
-        alert('Inspection recorded successfully!');
-        // Reset form and scanner
-        document.getElementById('inspector-form').reset();
-        document.getElementById('inspector-form').classList.add('hidden');
-        document.getElementById('scan-result').innerHTML = '';
-        if (html5QrCode) html5QrCode.resume();
-        updateDashboard();
-        
-    } catch (error) {
-        console.error('Full error object:', error);
-        console.error('Error status:', error.status);
-        console.error('Error message:', error.message);
-        console.error('Error details:', error.result ? error.result.error : 'No additional details');
-        alert(`Error recording inspection: ${error.message}`);
-    }
-}
-
-    // Handle form submission with async/await
-    document.getElementById('inspector-form').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        console.log('Form submitted');
-        
-        const inspectorName = document.getElementById('inspector-name').value;
-        const badgeNumber = document.getElementById('badge-number').value;
-
-        try {
-            const position = await new Promise((resolve, reject) => {
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(resolve, reject);
-                } else {
-                    reject(new Error('Geolocation not supported'));
-                }
-            });
-
-            const inspection = {
-                ...currentInspection,
-                inspectorName,
-                badgeNumber,
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude
-            };
-
-            await recordInspection(inspection);
-
-        } catch (error) {
-            console.error('Error getting location:', error);
-            const inspection = {
-                ...currentInspection,
-                inspectorName,
-                badgeNumber,
-                latitude: 'N/A',
-                longitude: 'N/A'
-            };
-            await recordInspection(inspection);
-        }
-    });
-
-    // Initialize the application
-    window.onload = async function() {
-        console.log('Application starting...');
-        try {
-            await initializeGoogleSheetsAPI();
-            initializeScanner();
-        } catch (error) {
-            console.error('Error during initialization:', error);
-            alert('Error initializing the application. Please refresh the page.');
-        }
-    };
-
-        // Initialize QR Scanner
-        function initializeScanner() {
-            console.log('Initializing scanner...');
-            if (!html5QrCode) {
-                html5QrCode = new Html5Qrcode("reader");
-                startScanner();
-            }
-        }
-
-        // Start the scanner with camera
-        function startScanner() {
-            const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1,
-                facingMode: "environment" // Use back camera only
-            };
-            
-            html5QrCode.start(
-                { facingMode: "environment" },
-                config,
-                onScanSuccess,
-                onScanError
-            ).catch(err => {
-                console.error('Error starting camera:', err);
-                document.getElementById('scan-result').innerHTML = 
-                    'Error accessing camera. Please make sure you have granted camera permissions.';
-            });
-        }
-
-        // Handle file selection for QR code scanning
-        function handleFileSelect(event) {
-            if (event.target.files.length === 0) {
-                return;
-            }
-            
-            const imageFile = event.target.files[0];
-            
-            // Stop any ongoing scanning
-            if (html5QrCode.isScanning) {
-                html5QrCode.stop().then(() => {
-                    scanFile(imageFile);
-                });
-            } else {
-                scanFile(imageFile);
-            }
-        }
-
-        function scanFile(imageFile) {
-            document.getElementById('scan-result').innerHTML = 'Scanning...';
-            
-            html5QrCode.scanFile(imageFile, true)
-                .then(decodedText => {
-                    onScanSuccess(decodedText, null);
-                })
-                .catch(err => {
-                    console.error('Error scanning file:', err);
-                    document.getElementById('scan-result').innerHTML = 
-                        'Error scanning QR code. Please try again with a clearer image.';
-                    // Restart the camera scanner
-                    startScanner();
-                });
-        }
-
-        // Handle successful QR scan
-        function onScanSuccess(decodedText, decodedResult) {
-            console.log('QR Code scanned:', decodedText);
+        // Initialize Google Sheets API
+        async function initializeGoogleSheetsAPI() {
             try {
-                const buildingData = JSON.parse(decodedText);
-                document.getElementById('scan-result').innerHTML = 
-                    `Building: ${buildingData.name} (ID: ${buildingData.id})`;
-                document.getElementById('inspector-form').classList.remove('hidden');
-                currentInspection = {
-                    buildingId: buildingData.id,
-                    buildingName: buildingData.name,
-                    startTime: new Date()
-                };
-                // Stop scanning after successful scan
-                if (html5QrCode && html5QrCode.isScanning) {
-                    html5QrCode.pause();
-                }
+                await new Promise((resolve, reject) => {
+                    gapi.load('client', resolve);
+                });
+                
+                await gapi.client.init({
+                    apiKey: API_KEY,
+                    discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"],
+                });
+                
+                isApiInitialized = true;
+                updateStatus('API initialized successfully', 'text-green-600');
             } catch (error) {
-                console.error('Error parsing QR code data:', error);
-                document.getElementById('scan-result').innerHTML = 
-                    'Invalid QR code format. Please try again.';
+                console.error('Error initializing API:', error);
+                updateStatus('Error initializing API: ' + error.message, 'text-red-600');
             }
         }
 
-        function onScanError(errorMessage) {
-            // We don't want to log every scan error as it happens frequently
-            // console.error('QR Scan error:', errorMessage);
+        // Update status message
+        function updateStatus(message, className) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `mt-4 text-sm ${className}`;
         }
 
         // Handle form submission
-        document.getElementById('inspector-form').addEventListener('submit', function(e) {
+        document.getElementById('test-form').addEventListener('submit', async function(e) {
             e.preventDefault();
-            console.log('Form submitted');
-            const inspectorName = document.getElementById('inspector-name').value;
-            const badgeNumber = document.getElementById('badge-number').value;
+            
+            const name = document.getElementById('name').value;
+            const badge = document.getElementById('badge').value;
+            
+            try {
+                if (!isApiInitialized) {
+                    updateStatus('Initializing API...', 'text-blue-600');
+                    await initializeGoogleSheetsAPI();
+                }
 
-            // Get current location
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    position => {
-                        console.log('Got location:', position);
-                        const inspection = {
-                            ...currentInspection,
-                            inspectorName,
-                            badgeNumber,
-                            latitude: position.coords.latitude,
-                            longitude: position.coords.longitude
-                        };
-                        recordInspection(inspection);
-                    },
-                    error => {
-                        console.error('Error getting location:', error);
-                        const inspection = {
-                            ...currentInspection,
-                            inspectorName,
-                            badgeNumber,
-                            latitude: 'N/A',
-                            longitude: 'N/A'
-                        };
-                        recordInspection(inspection);
+                updateStatus('Sending data...', 'text-blue-600');
+                
+                const response = await gapi.client.sheets.spreadsheets.values.append({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: 'AbqaiqHousing!A:B',
+                    valueInputOption: 'RAW',
+                    insertDataOption: 'INSERT_ROWS',
+                    resource: {
+                        values: [[name, badge]]
                     }
-                );
-            } else {
-                const inspection = {
-                    ...currentInspection,
-                    inspectorName,
-                    badgeNumber,
-                    latitude: 'N/A',
-                    longitude: 'N/A'
-                };
-                recordInspection(inspection);
+                });
+
+                console.log('Response:', response);
+                updateStatus('Data submitted successfully!', 'text-green-600');
+                this.reset();
+                
+            } catch (error) {
+                console.error('Error:', error);
+                updateStatus('Error: ' + error.message, 'text-red-600');
             }
         });
 
-        // Record inspection to Google Sheets
-        function recordInspection(inspection) {
-            console.log('Recording inspection:', inspection);
-            gapi.client.init({
-                apiKey: API_KEY,
-                discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"],
-            }).then(() => {
-                console.log('Google Sheets API initialized');
-                const range = 'Sheet1!A:H';
-                const values = [
-                    [
-                        inspection.inspectorName,
-                        inspection.badgeNumber,
-                        inspection.buildingId,
-                        inspection.buildingName,
-                        inspection.startTime.toISOString(),
-                        inspection.latitude,
-                        inspection.longitude
-                    ]
-                ];
-
-                gapi.client.sheets.spreadsheets.values.append({
-                    spreadsheetId: SPREADSHEET_ID,
-                    range: range,
-                    valueInputOption: 'RAW',
-                    insertDataOption: 'INSERT_ROWS',
-                    resource: { values }
-                }).then(response => {
-                    console.log('Inspection recorded:', response);
-                    alert('Inspection recorded successfully!');
-                    // Reset form and scanner
-                    document.getElementById('inspector-form').reset();
-                    document.getElementById('inspector-form').classList.add('hidden');
-                    document.getElementById('scan-result').innerHTML = '';
-                    if (html5QrCode) {
-                        html5QrCode.resume();
-                    }
-                    updateDashboard();
-                }).catch(error => {
-                    console.error('Error recording inspection:', error);
-                    alert('Error recording inspection. Please try again.');
-                });
-            }).catch(error => {
-                console.error('Error initializing Google Sheets API:', error);
-                alert('Error connecting to Google Sheets. Please check your API key.');
-            });
-        }
-
-        // Update dashboard data
-        function updateDashboard() {
-            console.log('Updating dashboard...');
-            gapi.client.sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_ID,
-                range: 'AbqaiqHousing!A:H'
-            }).then(response => {
-                const values = response.result.values;
-                if (values && values.length > 1) {
-                    const today = new Date().toDateString();
-                    const todayInspections = values.slice(1).filter(row => 
-                        new Date(row[4]).toDateString() === today
-                    );
-                    
-                    document.getElementById('total-inspections').textContent = 
-                        todayInspections.length;
-                    
-                    const activeInspectors = new Set(
-                        todayInspections.map(row => row[0])
-                    ).size;
-                    document.getElementById('active-inspectors').textContent = 
-                        activeInspectors;
-
-                    // Calculate average inspection time
-                    if (todayInspections.length > 0) {
-                        const totalDuration = todayInspections.reduce((sum, row) => {
-                            const duration = calculateDuration(new Date(row[4]));
-                            return sum + parseInt(duration);
-                        }, 0);
-                        const avgDuration = Math.round(totalDuration / todayInspections.length);
-                        document.getElementById('avg-inspection-time').textContent = 
-                            `${avgDuration} min`;
-                    }
-
-                    // Update inspection history table
-                    const historyHTML = todayInspections.map(row => `
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap">${row[0]}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">${row[3]}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                ${new Date(row[4]).toLocaleTimeString()}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                ${calculateDuration(new Date(row[4]))} min
-                            </td>
-                        </tr>
-                    `).join('');
-                    
-                    document.getElementById('inspection-history').innerHTML = historyHTML;
-                }
-            }).catch(error => {
-                console.error('Error updating dashboard:', error);
-            });
-        }
-
-        function calculateDuration(startTime) {
-            const duration = Math.floor(
-                (new Date() - startTime) / (1000 * 60)
-            );
-            return duration;
-        }
-
-        function toggleView(view) {
-            const scannerView = document.getElementById('scanner-view');
-            const dashboardView = document.getElementById('dashboard-view');
-            const scannerBtn = document.getElementById('scanner-btn');
-            const dashboardBtn = document.getElementById('dashboard-btn');
-
-            if (view === 'dashboard') {
-                // Show dashboard, hide scanner
-                scannerView.classList.add('hidden');
-                dashboardView.classList.remove('hidden');
-                // Show scanner button, hide dashboard button
-                scannerBtn.classList.remove('hidden');
-                dashboardBtn.classList.add('hidden');
-                // Stop the scanner
-                if (html5QrCode && html5QrCode.isScanning) {
-                    html5QrCode.stop();
-                }
-                updateDashboard();
-            } else {
-                // Show scanner, hide dashboard
-                scannerView.classList.remove('hidden');
-                dashboardView.classList.add('hidden');
-                // Show dashboard button, hide scanner button
-                scannerBtn.classList.add('hidden');
-                dashboardBtn.classList.remove('hidden');
-                // Restart the scanner
-                initializeScanner();
-            }
-        }
-
-        // Initialize the application
-        window.onload = function() {
-            console.log('Application starting...');
-            // Load and initialize both Google API client and scanner
-            gapi.load('client', () => {
-                console.log('Google API client loaded');
-                initializeScanner();
-            });
-        };
+        // Initialize on page load
+        window.onload = initializeGoogleSheetsAPI;
     </script>
 </body>
 </html>
