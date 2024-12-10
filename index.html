@@ -132,51 +132,54 @@
 
     // Record inspection to Google Sheets
     async function recordInspection(inspection) {
+    try {
         if (!isApiInitialized) {
+            console.log('API not initialized, attempting to initialize...');
             await initializeGoogleSheetsAPI();
         }
 
-        try {
-            console.log('Recording inspection:', inspection);
-            const range = 'Sheet1!A:H';
-            const values = [
-                [
-                    inspection.inspectorName,
-                    inspection.badgeNumber,
-                    inspection.buildingId,
-                    inspection.buildingName,
-                    inspection.startTime.toISOString(),
-                    inspection.latitude,
-                    inspection.longitude,
-                    new Date().toISOString() // Add end time
-                ]
-            ];
+        console.log('Recording inspection:', inspection);
+        const range = 'Sheet1!A:H';
+        const values = [
+            [
+                inspection.inspectorName,
+                inspection.badgeNumber,
+                inspection.buildingId,
+                inspection.buildingName,
+                inspection.startTime.toISOString(),
+                inspection.latitude,
+                inspection.longitude,
+                new Date().toISOString()
+            ]
+        ];
 
-            const response = await gapi.client.sheets.spreadsheets.values.append({
-                spreadsheetId: SPREADSHEET_ID,
-                range: range,
-                valueInputOption: 'RAW',
-                insertDataOption: 'INSERT_ROWS',
-                resource: { values }
-            });
+        const response = await gapi.client.sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: range,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            resource: { values }
+        });
 
-            console.log('Inspection recorded successfully:', response);
-            alert('Inspection recorded successfully!');
-            
-            // Reset form and scanner
-            document.getElementById('inspector-form').reset();
-            document.getElementById('inspector-form').classList.add('hidden');
-            document.getElementById('scan-result').innerHTML = '';
-            if (html5QrCode) {
-                html5QrCode.resume();
-            }
-            updateDashboard();
-            
-        } catch (error) {
-            console.error('Error recording inspection:', error);
-            alert('Error recording inspection. Please try again.');
+        console.log('Inspection recorded successfully:', response);
+        alert('Inspection recorded successfully!');
+        
+        // Reset form and scanner
+        document.getElementById('inspector-form').reset();
+        document.getElementById('inspector-form').classList.add('hidden');
+        document.getElementById('scan-result').innerHTML = '';
+        if (html5QrCode) {
+            html5QrCode.resume();
         }
+        updateDashboard();
+        
+    } catch (error) {
+        console.error('Error recording inspection. Full error:', error);
+        console.error('Error details:', error.result ? error.result.error : error);
+        console.error('Error message:', error.message);
+        alert(`Error recording inspection. Details: ${error.message}`);
     }
+}
 
     // Handle form submission with async/await
     document.getElementById('inspector-form').addEventListener('submit', async function(e) {
